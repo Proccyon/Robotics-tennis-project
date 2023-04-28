@@ -88,7 +88,7 @@ class RotatingJoint(Joint):
         self.maxTheta = maxTheta
         self.radius = radius
         self.maxVelocity = 3
-        self.acceleration = 0.1
+        self.acceleration = 0.15
         
         #---Variables---#
         self.theta = theta
@@ -130,7 +130,7 @@ class RotatingJoint(Joint):
         velocityOffset = targetV - self.motorVelocity
         
         if(np.abs(velocityOffset) <= dV):
-            self.motorVelocity = self.targetVelocity
+            self.motorVelocity = targetV
         else:
             direction = velocityOffset / np.abs(velocityOffset)
             self.motorVelocity += direction * dV
@@ -238,7 +238,7 @@ class ExtendingJoint(Joint):
         velocityOffset = targetV - self.motorVelocity
         
         if(np.abs(velocityOffset) <= dV):
-            self.motorVelocity = self.targetVelocity
+            self.motorVelocity = targetV
         else:
             direction = velocityOffset / np.abs(velocityOffset)
             self.motorVelocity += direction * dV

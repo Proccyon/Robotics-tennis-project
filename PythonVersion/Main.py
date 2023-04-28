@@ -23,9 +23,9 @@ class TennisRobot():
     def __init__(self, game, team, groundPosition, groundPositionFake, platformRotation):
         
         
-        platformLength, armLength1, armLength2, batLength = 50, 70, 70, 100
+        platformLength, armLength1, armLength2, batLength = 50, 50, 50, 100
         platformWidth = 15
-        rotatorMaxTheta = 0.25 * np.pi
+        rotatorMaxTheta = 0.35 * np.pi
         primaryRotatorRadius, secondaryRotatorRadius = 13, 10
         groundLength, groundWidth = 30, 20
         minMoverLength = 40
@@ -138,7 +138,8 @@ class Game:
         self.blueRobotColor = (0,0,150)
         self.redRobotColor = (150,0,0)
         
-        self.dt = 0.1
+        self.dt = 0.2
+        self.turn = "blue"
                 
         self.borderList = []
         
@@ -160,8 +161,10 @@ class Game:
         self.blueRobot, self.redRobot = self.createRobots()
         self.ball = Ball(vec(0.5 * self.Lx, 0.5 * self.Ly), 10)
         
-        ballAngle = np.random.uniform(0, 2 * np.pi)
-        self.ball.velocity = vec(np.cos(ballAngle), np.sin(ballAngle)) * 50
+        self.initialBallVelocity = 30
+        
+        ballAngle = np.random.uniform(0, 2 * np.pi)       
+        self.ball.velocity = vec(np.cos(ballAngle), np.sin(ballAngle)) * self.initialBallVelocity
         
         self.borderCollisionCooldown = 0.05
 
@@ -219,7 +222,7 @@ class Game:
     
     def drawGame(self):
         
-        game.window.clear()
+        self.window.clear()
         
         self.batchD0 = pyglet.graphics.Batch()
         self.batchD1 = pyglet.graphics.Batch()
@@ -272,6 +275,10 @@ class Game:
         
         while(allowedTime > 0):
         
+            if(self.ball.position.x < 0 or self.ball.position.y < 0 or self.ball.position.x > self.Lx or self.ball.position.y > self.Ly):
+                self.reset()
+        
+        
             borders = []
             collisionTimes = []
             collisionPositions = []
@@ -295,9 +302,11 @@ class Game:
                 if(collisionBorder.group == "blueJoint"):
                     self.redScore += 1
                     self.reset()
+                    break
                 if(collisionBorder.group == "redJoint"):
                     self.blueScore += 1
                     self.reset()
+                    break
                 
                 self.ball.step(minCollisionTime)
                 self.blueRobot.step(minCollisionTime)
@@ -333,8 +342,14 @@ class Game:
 
         self.ball.position = vec(0.5 * self.Lx, 0.5 * self.Ly)
         
-        ballAngle = np.random.uniform(0, 2 * np.pi)
-        self.ball.velocity = vec(np.cos(ballAngle), np.sin(ballAngle)) * 50
+        if(self.turn == "blue"):
+            ballAngle = np.random.uniform(-0.25 * np.pi, 0.25 * np.pi)
+            self.turn = "red"
+        else:
+            ballAngle = np.random.uniform(0.75 * np.pi, 1.25 * np.pi)
+            self.turn = "blue"
+            
+        self.ball.velocity = vec(np.cos(ballAngle), np.sin(ballAngle)) * self.initialBallVelocity
         
         
     def run(self, rounds, drawGame = False, blueAgent = None, redAgent = None):
@@ -369,7 +384,11 @@ class Game:
             while(self.blueScore + self.redScore < rounds):                
                 self.step()
                 
-        return (self.blueScore, self.redScore)
+        
+        if(drawGame):
+            self.window.close()
+        
+        return self.blueScore, self.redScore
 
         
         
@@ -379,13 +398,15 @@ class Game:
 #-----Main-----#
 
 
+if __name__ == "__main__":
+    
 
-
-game = Game()
-
-blueAgent = lambda inputs: [np.random.uniform(-30,30), np.random.uniform(-5,5), np.random.uniform(-5,5), np.random.uniform(-5,5), False, False, False, False]
-
-game.run(3, True, blueAgent = blueAgent, redAgent = None)
+    game = Game()
+    
+    blueAgent = lambda inputs: np.array([np.random.uniform(-30,30), np.random.uniform(-5,5), np.random.uniform(-5,5), np.random.uniform(-5,5), False, False, False, False])
+    redAgent = lambda inputs: np.array([np.random.uniform(-30,30), np.random.uniform(-5,5), np.random.uniform(-5,5), np.random.uniform(-5,5), False, False, False, False])
+    
+    game.run(20, True, blueAgent = blueAgent, redAgent = redAgent)
 
 
 
