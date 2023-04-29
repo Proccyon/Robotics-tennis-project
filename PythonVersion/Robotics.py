@@ -285,6 +285,25 @@ class Bar():
         
         return self.position, self.rotation
     
+    
+    def distanceTo(self, targetPosition):
+        
+        barDirection = vec(np.cos(self.rotation), np.sin(self.rotation))
+        myLength = barDirection.dot(self.position)
+        targetLength = barDirection.dot(targetPosition)
+        endLength = myLength + self.length
+        endPosition = self.position + barDirection * self.length
+                
+        if(myLength > targetLength):
+            return (targetPosition - self.position).length()
+        elif(endLength < targetLength):
+            return (targetPosition - endPosition).length()
+        else:
+            return np.sqrt((targetPosition - self.position).length()**2 - (targetLength - myLength)**2)
+            
+        
+        
+    
     #Update the borders for the physics engine
     def updateBorder(self):
         

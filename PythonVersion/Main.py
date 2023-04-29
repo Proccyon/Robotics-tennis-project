@@ -10,7 +10,7 @@ import pyglet
 from pyglet import shapes
 from pyglet.window import key, mouse
 import numpy as np
-
+import time
 
 
 
@@ -68,6 +68,8 @@ class TennisRobot():
         
         self.ground.updateUp()
         self.groundFake.updateUp()
+        
+
 
     def setInput(self, mVelocity, r1Velocity, r2Velocity, r3Velocity, mLocked, r1Locked, r2Locked, r3Locked):
         
@@ -167,6 +169,10 @@ class Game:
         self.ball.velocity = vec(np.cos(ballAngle), np.sin(ballAngle)) * self.initialBallVelocity
         
         self.borderCollisionCooldown = 0.05
+        
+        #---Debug---#
+        
+        self.timeRatioList = []
 
 
     def createRobots(self):
@@ -263,26 +269,77 @@ class Game:
         return [background, wallLeft, wallBot, wallTop, wallRight, lineLeft, lineRight, blueRobotDrawing, redRobotDrawing, ballDrawing, blueScoreText]
 
 
+    #One step of the simulation
     def step(self):
         
-        allowedTime = self.dt
-        
+        startAnn = time.time()
+               
+        #Control the motors of the robots based on the agents
         if(self.blueAgent != None):
             self.setBlueInput(self.blueAgent(self.getBlueOutput()))
             
         if(self.redAgent != None):
             self.setRedInput(self.redAgent(self.getRedOutput()))
+            
+        #Slow down time when close to the robots for more accurate physics
+        slowRate = self.getSlowRate()       
+        dtSlowed = slowRate * self.dt       
+
+        endAnn = time.time()
+        
+        allowedTime = self.dt
+        while(allowedTime > 0):
+            
+            if(dtSlowed <= allowedTime):       
+                self.physicsStep(dtSlowed)
+                allowedTime -= dtSlowed
+            else:
+                self.physicsStep(allowedTime)
+                break
+        
+        endPhys = time.time()
+        
+        if(endPhys - endAnn > 0):
+            timeRatio = (endAnn - startAnn) / (endPhys - endAnn)
+            
+            self.timeRatioList.append(timeRatio)
+            
+        
+    def getSlowRate(self):
+        
+        barList = [self.blueRobot.arm1, self.blueRobot.arm2, self.blueRobot.bat, self.redRobot.arm1,self.redRobot.arm2, self.redRobot.bat]
+        
+        distanceList = [bar.distanceTo(self.ball.position) for bar in barList]
+        minIndex = np.argmin(distanceList)
+        minBar = barList[minIndex]
+        barDistance = distanceList[minIndex]
+        
+        travelDistance = (minBar.velocity - self.ball.velocity).length() * self.dt
+        if(travelDistance <= barDistance + self.ball.radius):
+            slowRate = 1
+        else:
+            slowRate = (barDistance + self.ball.radius) / travelDistance
+            
+        return slowRate
+            
+    def physicsStep(self, dt):
+        
+        allowedTime = dt
         
         while(allowedTime > 0):
         
             if(self.ball.position.x < 0 or self.ball.position.y < 0 or self.ball.position.x > self.Lx or self.ball.position.y > self.Ly):
                 self.reset()
         
-        
             borders = []
             collisionTimes = []
             collisionPositions = []
+            ballSpeed = self.ball.velocity.length()
             for border in self.borderList:
+                
+                travelDistance = dt * (ballSpeed + border.velocity.length() + np.abs (border.angularVelocity) * border.length)
+                if(travelDistance + self.ball.radius < border.distanceTo(self.ball.position)):
+                    continue
                 
                 collisionTime, collisionPosition, collisionSuccess = border.getCollision(self.ball)
                 if(collisionSuccess and collisionTime >= 0 and collisionTime <= allowedTime and self.time + collisionTime >= border.lastCollided + self.borderCollisionCooldown):
@@ -291,8 +348,6 @@ class Game:
                     collisionPositions.append(collisionPosition)
                     
             if(len(borders) > 0):
-                
-                #print("colliding...")
                 
                 iMin = np.argmin(collisionTimes)
                 minCollisionTime = collisionTimes[iMin]
@@ -312,7 +367,7 @@ class Game:
                 self.blueRobot.step(minCollisionTime)
                 self.redRobot.step(minCollisionTime)
                 
-                collisionBorder.collide(self.ball, collisionPosition)
+                collisionBorder.collide(self.ball, collisionPosition, minCollisionTime)
                 
                 allowedTime -= minCollisionTime
                 self.time += minCollisionTime
@@ -326,7 +381,8 @@ class Game:
                 
                 self.time += allowedTime
                 break
-                
+    
+            
             
     def reset(self):
         
@@ -343,10 +399,10 @@ class Game:
         self.ball.position = vec(0.5 * self.Lx, 0.5 * self.Ly)
         
         if(self.turn == "blue"):
-            ballAngle = np.random.uniform(-0.25 * np.pi, 0.25 * np.pi)
+            ballAngle = np.random.uniform(-0.35 * np.pi, 0.35 * np.pi)
             self.turn = "red"
         else:
-            ballAngle = np.random.uniform(0.75 * np.pi, 1.25 * np.pi)
+            ballAngle = np.random.uniform(0.85 * np.pi, 1.15 * np.pi)
             self.turn = "blue"
             
         self.ball.velocity = vec(np.cos(ballAngle), np.sin(ballAngle)) * self.initialBallVelocity

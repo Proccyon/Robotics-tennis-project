@@ -27,9 +27,11 @@ class EvolutionaryTrainer():
         for i in range(nSteps):
             
             print("Round {}".format(i))
+            if(len(game.timeRatioList) > 0):
+                print("TimeRatio = {}".format(np.average(game.timeRatioList)))
             
-            if(i % 2 == 0):
-                np.random.choice(modelPopulation).compete(game, np.random.choice(modelPopulation), 5, True)
+            if(i % 2 == 0):         
+                np.random.choice(modelPopulation).compete(game, np.random.choice(modelPopulation), 8, True)
             
             modelPopulation = [self.mutationMethod(model, *self.mutationArgs) for model in modelPopulation]
             modelPopulation = self.selectionMethod(modelPopulation, game, nRounds,  *self.selectionArgs)
@@ -82,8 +84,6 @@ class TennisModel():
         output = np.array(rawOut)[0,:]
     
         output[4:8] = output[4:8] > 0
-        
-        #print(output)
 
         return output
     
@@ -150,7 +150,7 @@ def tournamentSelection(modelPopulation, game, rounds):
 
 
 nSteps = 200
-nPop = 20
+nPop = 10
 nRounds = 6
 
 mutationMethod = normalMutation

@@ -68,6 +68,120 @@ class LineBorder():
             
         def getCollision(self, ball):
             
+            
+            collisionTimes = []
+            collisionPositions = []
+            
+            borderDirection = vec(np.cos(self.rotation), np.sin(self.rotation))
+            angularVelocityDirection = vec(-np.sin(self.rotation), np.cos(self.rotation))
+            
+            edgePos = self.position
+            edgeVel = self.velocity
+            
+            #Check collision between ball and start point of line
+            cTime, cPos, cSuc = self.pointGetCollision(ball, edgePos, edgeVel)
+            if(cSuc):
+                collisionTimes.append(cTime)
+                collisionPositions.append(cPos)
+                            
+            edgePos = self.position + borderDirection * self.length
+            edgeVel = self.velocity + self.velocity + angularVelocityDirection * self.angularVelocity
+            
+            #Check collision between ball and end point of line
+            cTime, cPos, cSuc = self.pointGetCollision(ball, edgePos, edgeVel)
+            if(cSuc):
+                collisionTimes.append(cTime)
+                collisionPositions.append(cPos)
+                
+            #Check collision between ball and line
+            cTime, cPos, cSuc = self.lineGetCollision(ball)
+            if(cSuc):
+                collisionTimes.append(cTime)
+                collisionPositions.append(cPos)
+                
+            #Return whichever collision happens first
+            if(len(collisionTimes) > 0):               
+                minIndex = np.argmin(collisionTimes)
+                return collisionTimes[minIndex], collisionPositions[minIndex], True
+            else:
+                return 0, 0, False
+                
+        
+        def collide(self, ball, collisionPosition, collisionTime):
+            
+            #print("colliding...")
+            
+            borderDirection = vec(np.cos(self.rotation), np.sin(self.rotation))
+            angularVelocityDirection = vec(-np.sin(self.rotation), np.cos(self.rotation))
+            collisionOffset = (collisionPosition - self.position).length()
+            
+            collisionVelocity = self.velocity + angularVelocityDirection * self.angularVelocity * collisionOffset           
+            
+            #Calculate direction of momentum exchange
+            #newBallPos = ball.position + ball.velocity * collisionTime
+            impactDirection = ball.position - collisionPosition
+            impactDirection /= impactDirection.length() 
+           
+            #print("{}->{}".format(newBallPos, collisionPosition)) 
+           
+            dV = impactDirection * -2 * impactDirection.dot(ball.velocity - collisionVelocity)
+            
+            ball.velocity += dV
+            
+        def distanceTo(self, targetPosition):
+            
+            barDirection = vec(np.cos(self.rotation), np.sin(self.rotation))
+            myLength = barDirection.dot(self.position)
+            targetLength = barDirection.dot(targetPosition)
+            endLength = myLength + self.length
+            endPosition = self.position + barDirection * self.length
+                    
+            if(myLength > targetLength):
+                return (targetPosition - self.position).length()
+            elif(endLength < targetLength):
+                return (targetPosition - endPosition).length()
+            else:
+                return np.sqrt((targetPosition - self.position).length()**2 - (targetLength - myLength)**2)
+            
+            
+              
+            
+        #Calculates position and time of collision between ball and point         
+        def pointGetCollision(self, ball, pointPosition, pointVelocity):
+            
+            PosDiff = ball.position - pointPosition
+            VelDiff = ball.velocity - pointVelocity
+            
+            if(VelDiff.length() == 0):
+                return 0, 0, False
+            
+            #If ball and point intersect
+            if( PosDiff.length() < ball.radius):
+                
+                if(PosDiff.dot(VelDiff) > 0):
+                    return 0, pointPosition, True
+                else:
+                    return 0, 0, False
+                  
+            VbSquared = (VelDiff).length()**2
+            el1 = (VelDiff).dot(PosDiff)
+            el2 = VbSquared * (PosDiff.length()**2 - ball.radius**2)
+            D = el1**2 - el2
+            
+            if(D < 0):
+                return 0, 0, False
+            
+            collisionTime = (-el1 + np.sqrt(D)) / VbSquared 
+            
+            if(collisionTime > 0):
+                #collisionPosition = pointPosition + pointVelocity * collisionTime
+                return collisionTime, pointPosition, True
+            else:
+                return 0, 0, False
+            
+                    
+        def lineGetCollision(self, ball):
+            
             borderDirection = vec(np.cos(self.rotation), np.sin(self.rotation))
             angularVelocityDirection = vec(-np.sin(self.rotation), np.cos(self.rotation))
             
@@ -82,14 +196,14 @@ class LineBorder():
             Krr = borderDirection.dot(ballImpactposition - self.position)
             Kvv = angularVelocityDirection.dot(self.velocity - ball.velocity)
              
-            #Check if ball and border collide
+            #Check if ball and border intersect
             distanceVertical = np.abs(angularVelocityDirection.dot(ball.position - self.position))
             distanceHorizontal =  Krr       
             if(distanceVertical <= ball.radius and distanceHorizontal > 0 and distanceHorizontal < self.length):
                 borderVelocity = self.velocity + angularVelocityDirection * self.angularVelocity * Krr
                 
                 if(impactDirection.dot(ball.velocity - borderVelocity) <= 0):
-                    return 0, ball.position, True
+                    return 0, self.position + borderDirection * distanceHorizontal, True
                 else:
                     return 0, vec(0,0), False
             
@@ -113,34 +227,6 @@ class LineBorder():
                 collisionSuccess = False
                 
             return collisionTime, collisionPosition, collisionSuccess
-        
-        def collide(self, ball, collisionPosition):
-            
-            #print("colliding...")
-            
-            borderDirection = vec(np.cos(self.rotation), np.sin(self.rotation))
-            angularVelocityDirection = vec(-np.sin(self.rotation), np.cos(self.rotation))
-            collisionOffset = (collisionPosition - self.position).length()
-            
-            collisionVelocity = self.velocity + angularVelocityDirection * self.angularVelocity * collisionOffset
-            
-            #Calculate direction of momentum exchange
-            ballPositionRel = ball.position - self.position
-            impactDirection = ballPositionRel - borderDirection * borderDirection.dot(ballPositionRel)
-            impactDirection /= impactDirection.length()
-            
-            dV = impactDirection * -2 * impactDirection.dot(ball.velocity - collisionVelocity)
-            
-            ball.velocity += dV
-            
-            
-              
-            
-            
-            
-            
-            
-                
         
         
                          
