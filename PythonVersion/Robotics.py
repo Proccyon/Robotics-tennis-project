@@ -81,13 +81,13 @@ class Joint():
 class RotatingJoint(Joint):
     
     
-    def __init__(self, game, positionOffset, rotationOffset, minTheta, maxTheta, theta, radius):
+    def __init__(self, game, positionOffset, rotationOffset, minTheta, maxTheta, theta, radius, maxVelocity):
         
         #---Parameters---#
         self.minTheta = minTheta
         self.maxTheta = maxTheta
         self.radius = radius
-        self.maxVelocity = 3
+        self.maxVelocity = maxVelocity
         self.acceleration = 0.15
         
         #---Variables---#
@@ -151,14 +151,14 @@ class RotatingJoint(Joint):
 
 class ExtendingJoint(Joint):
 
-    def __init__(self, game, positionOffset, rotationOffset, minLength, maxLength, currentLength, width):
+    def __init__(self, game, positionOffset, rotationOffset, minLength, maxLength, currentLength, width, maxVelocity):
         
         #---Parameters---#
         
         self.minLength = minLength #Minimum extension length
         self.maxLength = maxLength #Maximum extension length    
         self.width = width
-        self.maxVelocity = 100
+        self.maxVelocity = maxVelocity
         self.acceleration = 20
         
         #---variables---#
@@ -247,8 +247,10 @@ class ExtendingJoint(Joint):
         
         if(self.currentLength + dL>= self.maxLength):
             self.currentLength = self.maxLength
+            self.motorVelocity = 0
         elif(self.currentLength + dL <= self.minLength):
             self.currentLength = self.minLength
+            self.motorVelocity = 0
         else:
             self.currentLength += dL
             

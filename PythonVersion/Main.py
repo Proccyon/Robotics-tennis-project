@@ -20,7 +20,7 @@ import time
 
 class TennisRobot():
     
-    def __init__(self, game, team, groundPosition, groundPositionFake, platformRotation):
+    def __init__(self, game, team, groundPosition, groundPositionFake, platformRotation, rotatorMaxTheta, rotatorMaxVelocity, maxMoverVelocity):
         
         
         platformLength, armLength1, armLength2, batLength = 50, 50, 50, 100
@@ -32,13 +32,13 @@ class TennisRobot():
         maxMoverLength = game.Ly - 2 * game.wallSize - 2 * groundLength - batLength
         
         self.ground = GroundedBar(game, groundPosition, 0.5 * np.pi, groundLength, groundWidth)       
-        self.mover = ExtendingJoint(game, 0, 0, minMoverLength, maxMoverLength, 0, 10)
+        self.mover = ExtendingJoint(game, 0, 0, minMoverLength, maxMoverLength, 0, 10, maxMoverVelocity)
         self.platform = Bar(game, platformLength, platformWidth)
-        self.rotator1 = RotatingJoint(game, 0.5 * platformLength, platformRotation, -rotatorMaxTheta, rotatorMaxTheta, 0, primaryRotatorRadius)
+        self.rotator1 = RotatingJoint(game, 0.5 * platformLength, platformRotation, -rotatorMaxTheta, rotatorMaxTheta, 0, primaryRotatorRadius, rotatorMaxVelocity)
         self.arm1 = Bar(game, armLength1, 10)
-        self.rotator2 = RotatingJoint(game, 0, 0, -rotatorMaxTheta, rotatorMaxTheta, 0, secondaryRotatorRadius)
+        self.rotator2 = RotatingJoint(game, 0, 0, -rotatorMaxTheta, rotatorMaxTheta, 0, secondaryRotatorRadius, rotatorMaxVelocity)
         self.arm2 = Bar(game, armLength2, 10)
-        self.rotator3 = RotatingJoint(game, 0, 0, -rotatorMaxTheta, rotatorMaxTheta, 0, secondaryRotatorRadius)
+        self.rotator3 = RotatingJoint(game, 0, 0, -rotatorMaxTheta, rotatorMaxTheta, 0, secondaryRotatorRadius, rotatorMaxVelocity)
         self.bat = Bar(game, batLength, 5)
         
         self.mover.setParent(self.ground)
@@ -59,7 +59,7 @@ class TennisRobot():
         
         #The mover at the top doesnt actually do anything
         self.groundFake = GroundedBar(game, groundPositionFake, -0.5 * np.pi, groundLength, groundWidth)    
-        self.moverFake = ExtendingJoint(game, 0, 0, 0, 0, 0, 10)
+        self.moverFake = ExtendingJoint(game, 0, 0, 0, 0, 0, 10, maxMoverVelocity)
         
         self.moverFake.setParent(self.groundFake)
         
@@ -140,7 +140,7 @@ class Game:
         self.blueRobotColor = (0,0,150)
         self.redRobotColor = (150,0,0)
         
-        self.dt = 0.2
+        self.dt = 0.4
         self.turn = "blue"
                 
         self.borderList = []
@@ -170,6 +170,11 @@ class Game:
         
         self.borderCollisionCooldown = 0.05
         
+        self.lastHitTime = 9999
+        self.lastHitTeam = "neutral"
+        self.penaltyTime = 100
+        
+        
         #---Debug---#
         
         self.timeRatioList = []
@@ -177,11 +182,15 @@ class Game:
 
     def createRobots(self):
         
+        self.maxTheta = 0.35 * np.pi
+        self.maxRotatorVelocity = 3
+        self.maxMoverVelocity = 100
+        
         blueRobotX = self.wallSize + self.robotOffset
-        blueRobot = TennisRobot(self, "blue", vec(blueRobotX, self.wallSize),vec(blueRobotX, self.Ly - self.wallSize),  -0.5 * np.pi)
+        blueRobot = TennisRobot(self, "blue", vec(blueRobotX, self.wallSize),vec(blueRobotX, self.Ly - self.wallSize),  -0.5 * np.pi, self.maxTheta, self.maxRotatorVelocity, self.maxMoverVelocity)
         
         redRobotX = self.Lx - self.wallSize - self.robotOffset
-        redRobot = TennisRobot(self, "red", vec(redRobotX, self.wallSize),vec(redRobotX, self.Ly - self.wallSize), 0.5 * np.pi)
+        redRobot = TennisRobot(self, "red", vec(redRobotX, self.wallSize),vec(redRobotX, self.Ly - self.wallSize), 0.5 * np.pi, self.maxTheta, self.maxRotatorVelocity, self.maxMoverVelocity)
         
         blueRobot.mover.currentLength = (self.Ly - 2 * self.wallSize) / 2
         redRobot.mover.currentLength = (self.Ly - 2 * self.wallSize) / 2
@@ -315,10 +324,10 @@ class Game:
         barDistance = distanceList[minIndex]
         
         travelDistance = (minBar.velocity - self.ball.velocity).length() * self.dt
-        if(travelDistance <= barDistance + self.ball.radius):
+        if(2 * travelDistance <= barDistance + self.ball.radius):
             slowRate = 1
         else:
-            slowRate = (barDistance + self.ball.radius) / travelDistance
+            slowRate = (barDistance + self.ball.radius) / (2 * travelDistance)
             
         return slowRate
             
@@ -327,13 +336,24 @@ class Game:
         allowedTime = dt
         
         while(allowedTime > 0):
+            
+            if(self.time>= self.lastHitTime + self.penaltyTime):
+                
+                if(self.lastHitTeam == "blue"):
+                    self.redScore += 1
+                if(self.lastHitTeam == "red"):
+                    self.blueScore += 1
+                    
+                self.reset()
+                break
         
             if(self.ball.position.x < 0 or self.ball.position.y < 0 or self.ball.position.x > self.Lx or self.ball.position.y > self.Ly):
                 self.reset()
+                break
         
             borders = []
             collisionTimes = []
-            collisionPositions = []
+            collisionArgsList = []
             ballSpeed = self.ball.velocity.length()
             for border in self.borderList:
                 
@@ -341,22 +361,31 @@ class Game:
                 if(travelDistance + self.ball.radius < border.distanceTo(self.ball.position)):
                     continue
                 
-                collisionTime, collisionPosition, collisionSuccess = border.getCollision(self.ball)
+                collisionTime, collisionSuccess, collisionArgs = border.getCollision(self.ball)
                 if(collisionSuccess and collisionTime >= 0 and collisionTime <= allowedTime and self.time + collisionTime >= border.lastCollided + self.borderCollisionCooldown):
                     borders.append(border)
                     collisionTimes.append(collisionTime)
-                    collisionPositions.append(collisionPosition)
+                    collisionArgsList.append(collisionArgs)
                     
             if(len(borders) > 0):
                 
                 iMin = np.argmin(collisionTimes)
                 minCollisionTime = collisionTimes[iMin]
                 collisionBorder = borders[iMin]
-                collisionPosition = collisionPositions[iMin]
+                collisionArgsMin = collisionArgsList[iMin]
                 
+
+                if(collisionBorder.group == "blueBat" and self.lastHitTeam != "blue"):
+                    self.lastHitTime = self.time
+                    self.lastHitTeam = "blue"
+                if(collisionBorder.group == "redBat" and self.lastHitTeam != "red"):
+                    self.lastHitTime = self.time
+                    self.lastHitTeam = "red"
+                    
                 if(collisionBorder.group == "blueJoint"):
                     self.redScore += 1
                     self.reset()
+                    
                     break
                 if(collisionBorder.group == "redJoint"):
                     self.blueScore += 1
@@ -367,7 +396,7 @@ class Game:
                 self.blueRobot.step(minCollisionTime)
                 self.redRobot.step(minCollisionTime)
                 
-                collisionBorder.collide(self.ball, collisionPosition, minCollisionTime)
+                collisionBorder.collide(self.ball, minCollisionTime, *collisionArgsMin)
                 
                 allowedTime -= minCollisionTime
                 self.time += minCollisionTime
@@ -402,10 +431,16 @@ class Game:
             ballAngle = np.random.uniform(-0.35 * np.pi, 0.35 * np.pi)
             self.turn = "red"
         else:
-            ballAngle = np.random.uniform(0.85 * np.pi, 1.15 * np.pi)
+            ballAngle = np.random.uniform(0.65 * np.pi, 1.35 * np.pi)
             self.turn = "blue"
             
+        #ballAngle = np.random.uniform(0.65* np.pi, 1.35 * np.pi)
+
+            
         self.ball.velocity = vec(np.cos(ballAngle), np.sin(ballAngle)) * self.initialBallVelocity
+        
+        self.lastHitTeam = "neutral"
+        self.lastHitTime = self.time
         
         
     def run(self, rounds, drawGame = False, blueAgent = None, redAgent = None):
@@ -431,7 +466,6 @@ class Game:
                 if(self.blueScore + self.redScore >= rounds):
                     
                     pyglet.app.exit()
-
                 
             pyglet.app.run()
                         
