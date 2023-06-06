@@ -7,6 +7,18 @@ from pyglet import shapes
 import numpy as np
 from Vector import vec
 
+
+#----------Summary----------#
+#This file contains all the collision interactions. Collisions only happen
+#between balls and PhysicsBorders. The physicsBorders are attached to the walls
+#and all the parts of the robot which is what allows them to interact with the
+#ball. The physicsBorder defines the collision through the getCollision method
+#and collide methods. getCollision returns when and where a collision with a given
+#ball will take place, assuming no change in direction. collide changes the velocity
+#off the ball based on energy and momentum conservation.
+#---------------------------#
+
+
 class Ball():
     
     def __init__(self, position, radius):
@@ -46,7 +58,7 @@ class PhysicsBorder():
     def collide(self, ball, position):
         pass
     
-    
+#Not implemented yet, would be used by rotating joints
 class CircleBorder():
     
     def __init__(self, position, radius, static = False):
@@ -56,7 +68,8 @@ class CircleBorder():
         
     def getCollision(ball):
         pass
-    
+
+#This is attached to every wall and robot part
 class LineBorder():
     
         def __init__(self, position, rotation, length, static = False):

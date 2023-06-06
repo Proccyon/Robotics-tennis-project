@@ -6,6 +6,18 @@ from Physics import Ball, PhysicsBorder, LineBorder, CircleBorder
 import numpy as np
 from pyglet import shapes
 
+
+#----------Summary----------#
+#Defines all the different parts of the robot and how the move relative to each other.
+#Bars are the rectangular solid parts of the robot. They are connected to each other 
+#through joints. Joints define how bars move relative to each other. Joints have a 
+#method getChildFrame that returns the reference frame of their child bar. This 
+#method defines how the joint works. They also contain a step function that does 
+#all the movement each step.
+#---------------------------#
+
+
+
 class Joint():
     
     def __init__(self, game, positionOffset, rotationOffset):

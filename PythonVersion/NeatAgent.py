@@ -1,6 +1,6 @@
 
 #-----Imports-----#
-from Main import Game
+from TennisEnv import Game
 import visualize
 
 import os
@@ -10,7 +10,15 @@ import numpy as np
 import pickle
 import matplotlib.pyplot as plt
 
+#----------Summary----------#
+#This trains an agent to play the TennisEnv using the NEAT algorithm.
+#Use the if statements below to set if you want to run NEAT, plot previous run
+#or find the best genome in previous run. When running NEAT the results are
+#saved every generation so you can end training any time. You can change the
+#hyper parameters of NEAT in the 'neat_config.txt' text file.
+#---------------------------#
 
+#Wrapper for the tennis env to change input and output
 class TennisModel():
     
     def __init__(self, net, game):
@@ -29,8 +37,6 @@ class TennisModel():
         else:
             return np.array([np.random.uniform(-30,30), np.random.uniform(-5,5), np.random.uniform(-5,5), np.random.uniform(-5,5), False, False, False, False])
         
-        
-    
     #Transform the input so it falls mostly within [-1, 1]
     def transformInput(self, rawIn):
         
@@ -66,7 +72,7 @@ class TennisModel():
         return myScore, enemyScore
 
 
-
+#Calculates the fitness of every genome by playing tennis games
 def eval_genomes(genomes, config, game, rounds, savePath):
     
     fitnessList = []
@@ -77,8 +83,9 @@ def eval_genomes(genomes, config, game, rounds, savePath):
         myAgent = TennisModel(myNet, game)
         enemyAgent = TennisModel(None, game)
         
-        #if(genome_id % 80 == 0):
-        #    myAgent.compete(enemyAgent, 8, True)
+        #You can uncomment this to show a match every few generaitons
+        # if(genome_id % 80 == 0):
+        #     myAgent.compete(enemyAgent, 8, True)
         
         myScore, enemyScore = myAgent.compete(enemyAgent, rounds)
         
@@ -88,31 +95,15 @@ def eval_genomes(genomes, config, game, rounds, savePath):
         
     genome_id, bestGenome = genomes[np.argmax(fitnessList)]
     genomeList.append(bestGenome)
-    
-    if(genome_id % 3 == 0):
-        myNet = neat.nn.FeedForwardNetwork.create(bestGenome, config)    
-        myAgent = TennisModel(myNet, game)      
-        myAgent.compete(myAgent, 8, True)
+    fitnessArray.append(fitnessList)
     
     with open(savePath, "wb") as saveFile:
-        pickle.dump(genomeList, saveFile)
+        pickle.dump([genomeList, fitnessArray], saveFile)
 
         
-def eval_genome(genome, config, game, rounds):
-    
-    myNet = neat.nn.FeedForwardNetwork.create(genome, config)
-
-    myAgent = TennisModel(myNet, game)
-    enemyAgent = TennisModel(None, game)
-    
-    #if(genome.key % 40 == 0):
-    #    myAgent.compete(enemyAgent, 10, True)
-    
-    myScore, enemyScore = myAgent.compete(enemyAgent, rounds)
-    
-    return myScore / rounds
 
 
+#Runs neat
 def run(config_file, nRounds, saveFile):
     # Load configuration.
     config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
@@ -128,14 +119,9 @@ def run(config_file, nRounds, saveFile):
     p.add_reporter(stats)
 
     game = Game()
-    #evaluator = lambda genome, config: eval_genome(genome, config, game, nRounds)
-    evaluator = lambda genomes, config: eval_genomes(genomes, config, game, nRounds, saveFile)
 
-    # Run for up to 300 generations.
-    #pe = neat.ThreadedEvaluator(8, evaluator)
-    #winner = p.run(pe.evaluate, 300)
-    #pe.stop()
-    
+    evaluator = lambda genomes, config: eval_genomes(genomes, config, game, nRounds, saveFile)
+ 
     winner = p.run(evaluator, 60000)
 
     # Display the winning genome.
@@ -152,15 +138,23 @@ def run(config_file, nRounds, saveFile):
     p.run(eval_genomes, 10)
 
 
-def getFitness(genomes, config, game, testRounds, interval):
+#Used for better looking plots
+def reduce(array, interval):
+    
+        while not len(array) % interval == 0:           
+            array = array[1:]
+                 
+        return np.mean(array.reshape(-1, interval), axis=1)
+    
+#Finds best performing genome out of a set of genomes
+def getBestGenome(genomes, config, game, testRounds):
     
     enemyAgent = TennisModel(None, game)
     generationList = []
     fitnessList = []
+    
+    #Loop through all genomes to find best performing one
     for i, genome in enumerate(genomes):
-        
-        if(i%interval != 0):
-            continue
         
         print("Testing genome {}/{}".format(i+1,len(genomes)))
         net = neat.nn.FeedForwardNetwork.create(genome, config)
@@ -170,42 +164,35 @@ def getFitness(genomes, config, game, testRounds, interval):
         generationList.append(i)
         fitnessList.append(fitness)
         
-    return generationList, fitnessList
-
-def plotFitness(generationList, fitnessList):
+    #Retest best performing genome
+    bestGenome = genomes[np.argmax(fitnessList)]
+    bestNet = neat.nn.FeedForwardNetwork.create(bestGenome, config)
+    bestAgent = TennisModel(bestNet, game)
+    myScore, enemyScore = bestAgent.compete(enemyAgent, 500, False)
     
-        plt.figure()
+    fitness = myScore / 500
         
-        plt.plot(generationList, fitnessList)
-        
-        plt.xlim(0, np.amax(generationList))
-        plt.ylim(0, 1)
-        
-        plt.xlabel("Generation")
-        plt.ylabel("Fitness")
-        
-        plt.grid(linestyle="--")
-        
-        plt.savefig("FitnessPlot.png")
+    return genomes[np.argmax(fitnessList)], fitness
     
-    
-
-
 if __name__ == '__main__':
-    # Determine path to configuration file. This path manipulation is
-    # here so that the script will run successfully regardless of the
-    # current working directory.
+
+    
     
     savePath = "genomeHistory.txt"
     
     local_dir = os.path.dirname(__file__)
     config_path = os.path.join(local_dir, 'neat_config.txt')
     
-    #Run neat
-    if(1):
+    config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                         neat.DefaultSpeciesSet, neat.DefaultStagnation,
+                         config_path)
     
-        genomeList = []     
-        rounds = 8
+    #Run neat
+    if(0):
+    
+        genomeList = []
+        fitnessArray = []
+        rounds = 12 #rounds used in estimating fitness
         run(config_path, rounds,  savePath)
     
     #Plot previous run
@@ -217,26 +204,78 @@ if __name__ == '__main__':
         
         game = Game()
         
-        with open("run8/" + savePath, "rb") as saveFile:
-            genomeHistory = pickle.load(saveFile)
+        FolderName = "run3" #You can change this to run1/run2 to plot other data
+        with open(FolderName +"/" + savePath, "rb") as saveFile:
+            genomeHistory, fitnessArray = pickle.load(saveFile)
         
-        testRounds = 50
-        interval = 3
-        generationList, fitnessList = getFitness(genomeHistory, config, game, testRounds, interval)               
-
-        #visualize.plot_stats(stats, ylog=False, view=True)
-        #visualize.plot_species(stats, view=True)
+        
+        #Calculate average fitness and std
+        averageFitnessList = np.array([np.average(fitnessArray[i]) for i in range(len(fitnessArray))])
+        stdFitnessList = np.array([np.sqrt(np.average((fitnessArray[i]-averageFitnessList[i])**2)) for i in range(len(fitnessArray))])    
+        generationList = np.arange(len(averageFitnessList))
+        
+        #Reduce array size to increase visibility
+        averagingInterval = 6      
+        averageFitnessList = reduce(averageFitnessList, averagingInterval)
+        stdFitnessList = reduce(stdFitnessList, averagingInterval)
+        generationList = reduce(generationList, averagingInterval)              
+        
+        #Plot the fitness over time
+        plt.figure()
+        
+        plt.plot(generationList, averageFitnessList, label="Average Fitness", color = "black")
+        plt.fill_between(generationList, averageFitnessList-stdFitnessList, averageFitnessList+stdFitnessList, label="Standard deviation")
+        
+        plt.xlim(0, np.amax(generationList))
+        plt.ylim(0.4, 1)
+        
+        plt.xlabel("Generation")
+        plt.ylabel("Fitness")
+        
+        plt.grid(linestyle="--")
+        plt.legend()
+        
+        plt.savefig("FitnessPlot.png")
+        
+    #Find best genome
+    if(0):
             
-        winner = genomeHistory[-1]
-        net = neat.nn.FeedForwardNetwork.create(winner, config)
-        winnerAgent = TennisModel(net, game)
-        myScore, enemyScore = winnerAgent.compete(winnerAgent, 20, True)
+        testRounds = 50
         
-        plotFitness(generationList, fitnessList)       
+        config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                             neat.DefaultSpeciesSet, neat.DefaultStagnation,
+                             config_path)
         
-        visualize.draw_net(config, winner, True)
-        visualize.draw_net(config, winner, True, prune_unused=True)
+        game = Game()
         
+        FolderName = "run3" #You can change this to run1/run2 to plot other data
+        with open(FolderName + "/" + savePath, "rb") as saveFile:
+            genomeHistory, fitnessArray = pickle.load(saveFile)
+        
+        bestGenome, bestFitness = getBestGenome(genomeHistory, config, game, testRounds)
+        print("bestFitness = {}".format(bestFitness))
+        
+    #Play a trained agent
+    if(1):
+        
+        config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                             neat.DefaultSpeciesSet, neat.DefaultStagnation,
+                             config_path)
+        
+        game = Game()
+
+        FolderName = "run3" #You can change this to run1/run2 to plot other data
+        with open(FolderName + "/" + savePath, "rb") as saveFile:
+            genomeHistory, fitnessArray = pickle.load(saveFile)        
+
+        genome = genomeHistory[-1]
+
+        net = neat.nn.FeedForwardNetwork.create(genome, config)
+        myAgent = TennisModel(net, game)
+        myScore, enemyScore = myAgent.compete(myAgent, 30, True)
+
+
+
 
         
         
